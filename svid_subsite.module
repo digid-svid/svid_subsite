@@ -1,0 +1,239 @@
+<?php
+// $Id$ 
+
+/**
+ * The subsite module is used to manage subsites that run from subdirectories
+ * on the server instead of specific (sub)domains. Because FTP does not support
+ * the creation of symlinks, a different approach is neccessary. This module
+ * allows the creation of symlinks to the site root, which allows Drupal
+ * to recognize it as a subite.
+ * 
+ * Requirements:
+ * For this module to function correctly, the user under which the server is 
+ * running needs write access to the directories where symlinks will be created.
+ */
+
+/**
+ * Implementation of hook_theme().
+ */
+function svid_subsite_theme() {
+  return array(
+    'svid_subsite_management_form' => array(
+      'arguments' => array('form' => NULL),
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function svid_subsite_perm() {
+  return array('administer subsites');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function svid_subsite_menu() {
+  return array(
+    'admin/settings/subsite' => array(
+      'title' => t('Subsite administration'),
+      'access arguments' => array('administer subsites'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('svid_subsite_settings_form'),
+      'type' => MENU_LOCAL_TASK,
+    ),
+    'admin/settings/subsite/create' => array(
+      'title' => t('Create'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+    ),
+    'admin/settings/subsite/manage' => array(
+      'title' => t('Manage'),
+      'access arguments' => array('administer subsites'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('svid_subsite_management_form'),
+      'type' => MENU_LOCAL_TASK,
+    ),
+  );
+}
+
+/**
+ * Form for creating a new subsite.
+ */
+function svid_subsite_settings_form() {
+  return array(
+    'subsite_path' => array(
+      '#type' => 'textfield',
+      '#title' => t('Path'),
+      '#field_prefix' => url(NULL, array('absolute' => TRUE)),
+      '#size' => '20',
+      '#description' => t('The new subsite will be reachable on the given path. You will still need to create a new directory in the /sites directory for this subsite to function correctly.'),
+    ),
+    'subsite_submit' => array(
+      '#type' => 'submit',
+      '#value' => t('Add symlink'),
+    ),
+  );
+}
+
+/**
+ * Validates the user input for creating a new subsite.
+ * 
+ * Currenlty checks if the path supplied already exists.
+ */
+function svid_subsite_settings_form_validate($form, &$form_state) {
+  $site_root = _svid_subsite_site_root();
+  $relative_path = $form_state['values']['subsite_path'];
+
+  $path = sprintf('%s/%s', $site_root, $relative_path);
+  if (file_exists($path)) {
+    form_set_error('subsite_path', t('The supplied path already exists'));
+  }
+  else {
+    $form_state['values']['subsite_full_path'] = $path;
+  }
+}
+
+/**
+ * Creates the new subsite by symlinking the given path to the site root.
+ */
+function svid_subsite_settings_form_submit($form, &$form_state) {
+  $site_root = _svid_subsite_site_root();
+
+  if (symlink($site_root, $form_state['values']['subsite_full_path'])) {
+    drupal_set_message(t('Created subsite path %path', array('%path' => $form_state['values']['subsite_path'])));
+  }
+  else {
+    drupal_set_message(t('Failed to create subsite path %path', array('%path' => $form_state['values']['subsite_path'])));
+  }
+}
+
+/**
+ * Get the document root for the current Drupal installation.
+ * $_SERVER['DOCUMENT_ROOT'] is not reliable across all
+ * systems, so we need a way to get the correct value.
+ *
+ * @return (string)
+ */
+function _svid_subsite_site_root() {
+  $absolute_dir = dirname(__FILE__);
+  $relative_dir = drupal_get_path('module', 'svid_subsite');
+  return substr($absolute_dir, 0, -1 * (1 + strlen($relative_dir)));
+}
+
+/**
+ * Subsite management page.
+ *
+ * List of currently available subsites with possibility to remove them.
+ */
+function svid_subsite_management_form() {
+  $site_root = _svid_subsite_site_root();
+
+  $subsites = array(
+    'ejw' => array(),
+    'iob' => array(),
+    'rsp' => array(),
+  );
+
+  $form = array();
+
+  foreach ($subsites as $subsite => $years) {
+    $subsite_root = sprintf('%s/%s', $site_root, $subsite);
+
+    if (is_dir($subsite_root) === FALSE) {
+      continue;
+    }
+
+    $dh = opendir($subsite_root);
+
+    while (($entry = readdir($dh)) !== FALSE) {
+      if ($entry == '.' || $entry == '..') {
+        continue;
+      }
+
+      $subsite_root_path = sprintf('%s/%s', $subsite_root, $entry);
+      $subsite_path = sprintf('%s/%s', $subsite, $entry);
+
+      if (is_link($subsite_root_path)) {
+        $paths[$subsite_path] = '';
+        $form['path'][$subsite_path]['#value'] = $subsite_path;
+        $form['name'][$subsite_path]['#value'] = strtoupper($subsite) . ' ' . $entry;
+        $form['actions'][$subsite_path]['#value'] = l(t('view'), $subsite_path, array('absolute' => TRUE));
+        $subsites[$subsite][$entry] = str_replace($site_root, '', $subsite_path);
+      }
+    }
+
+    closedir($dh);
+  }
+
+  $form['delete'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $paths
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Remove selected subsites'),
+  );
+
+  return $form;
+}
+
+/**
+ * Cleans up deletion array and throws an error when nothing is selected.
+ */
+function svid_subsite_management_form_validate($form, &$form_state) {
+  $form_state['values']['delete'] = array_filter($form_state['values']['delete']);
+  if (count($form_state['values']['delete']) === 0) {
+    form_set_error('', t('No subsites selected.'));
+  }
+}
+
+/**
+ * Removes the selected subsites symlinks, rendering the subsite unreachable.
+ */
+function svid_subsite_management_form_submit($form, &$form_state) {
+  $site_root = _svid_subsite_site_root();
+
+  foreach ($form_state['values']['delete'] as $subsite_path) {
+    $subsite_root_path = sprintf('%s/%s', $site_root, $subsite_path);
+    if (unlink($subsite_root_path) === FALSE) {
+      drupal_set_message(t('Failed to remove subsite %path', array('%path' => $subsite_path)), 'error');
+      return;
+    }
+  }
+
+  drupal_set_message(t('Succesfully removed selected subsites.'));
+}
+
+/**
+ * Convert the list of subsites to a tabular structure.
+ */
+function theme_svid_subsite_management_form($form) {
+  $header = array(
+    theme('table_select_header_cell'),
+    t('Name'),
+    t('Path'),
+    t('Actions'),
+  );
+
+  $rows = array();
+  if (isset($form['path']) && is_array($form['path'])) {
+    foreach (element_children($form['path']) as $subsite_path) {
+      $rows[] = array(
+        drupal_render($form['delete'][$subsite_path]),
+        drupal_render($form['name'][$subsite_path]),
+        drupal_render($form['path'][$subsite_path]),
+        drupal_render($form['actions'][$subsite_path]),
+      );
+    }
+
+    $content = theme('table', $header, $rows);
+    $content .= drupal_render($form);
+  }
+  else {
+    $content = t('No subsites found.');
+  }
+
+  return $content;
+}

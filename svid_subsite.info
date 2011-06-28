@@ -1,0 +1,6 @@
+; $Id$ 
+name = Subsite utilities
+description = Manage Drupal subsites
+package = Studievereniging i.d
+version = 6.x-1.0
+core = 6.x
