@@ -9,38 +9,10 @@
  * Implementation of hook_install() 
  */
 function svid_subsite_install() {
-  drupal_install_schema('svid_subsite');
 }
 
 /**
  * Implementation of hook_uninstall() 
  */
 function svid_subsite_uninstall() {
-  drupal_uninstall_schema('svid_subsite');
-}
-
-/**
- * Implementation of hook_schema() 
- */
-function svid_subsite_schema() {
-  return array(
-    'dir_alias' => array(
-      'description' => 'List of created aliases for subsites.',
-      'fields' => array(
-        'aid' => array(
-          'description' => 'Primary key: the alias ID.',
-          'type' => 'serial',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-        ),
-        'path' => array(
-          'description' => 'The path to use as an alias',
-          'type' => 'varchar',
-          'length' => 128,
-          'not null' => TRUE,
-        ),
-      ),
-      'primary key' => array('order_id'),
-    ),
-  );
 }
