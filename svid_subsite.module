@@ -1,5 +1,5 @@
 <?php
-// $Id$ 
+// $Id$
 
 /**
  * The subsite module is used to manage subsites that run from subdirectories
@@ -7,9 +7,9 @@
  * the creation of symlinks, a different approach is neccessary. This module
  * allows the creation of symlinks to the site root, which allows Drupal
  * to recognize it as a subite.
- * 
+ *
  * Requirements:
- * For this module to function correctly, the user under which the server is 
+ * For this module to function correctly, the user under which the server is
  * running needs write access to the directories where symlinks will be created.
  */
 
@@ -78,7 +78,7 @@ function svid_subsite_settings_form() {
 
 /**
  * Validates the user input for creating a new subsite.
- * 
+ *
  * Currenlty checks if the path supplied already exists.
  */
 function svid_subsite_settings_form_validate($form, &$form_state) {
@@ -236,4 +236,14 @@ function theme_svid_subsite_management_form($form) {
   }
 
   return $content;
+}
+
+/**
+ * Implementation of hook_form_alter().
+ *
+ * @todo This really does not belong here, but it is too small for a
+ * seperate module. Find something to merge this to.
+ */
+function svid_subsite_form_locale_languages_configure_form_alter(&$form, &$form_state) {
+  $form['language_negotiation']['#options'][4] = t('Use browser setting.');
 }
